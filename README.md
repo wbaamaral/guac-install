@@ -1,10 +1,14 @@
 # guac-install
 
-I've maintained this script for quite a few years now with the help of the other contributors and it seems to be getting more and more fragmented as libraries and system OSes diverge in their package management. I plan to continue mantaining the install script, but, I do highly suggest that more people try to use the containerized (docker) version. As it should work on basically any 64bit OS with Docker support. (That mean it doesn't work on 32bit ARM/Rasp Pi)
+I've maintained this script for quite a few years now with the help of the other contributors and it seems to be getting more and more fragmented as libraries and system OSes diverge in their package management. I do **not** plan on maintaining this beyond perhaps approving other people's PRs and letting people continue to discuss issues, so I won't archive it but I'm also not actively maintaining it 🤷‍♂️
+
+You can also check out this other [Guacamole-Setup](https://github.com/itiligent/Guacamole-Setup) repo which sets up a complete **Virtual Desktop/Jump Server appliance with MFA, Active Directory integration & Nginx SSL reverse proxy** for more inspiration.
+
+## NOTE: The fixes below are not to be used UNLESS you're having issues, don't run these for no reason, use the distro maintainers version unless there's a reason not to.
 
 ## NOTE: Ubuntu users having issues with RDP have reported the following fix:
 ```
-sudo add-apt-repository ppa:remmina-ppa-team/freerdp-daily
+sudo add-apt-repository ppa:remmina-ppa-team/remmina-next
 sudo apt-get update
 sudo apt-get install freerdp2-dev freerdp2-x11
 ```
@@ -16,23 +20,21 @@ sudo apt update
 sudo apt -y -t buster-backports install freerdp2-dev libpulse-dev
 ```
 
-Script for installing Guacamole 1.3.0 on Ubuntu 16.04 or newer (with MySQL, or remote MySQL). It should also work on pure [Debian](https://www.debian.org/), [Raspbian](https://www.raspberrypi.org/downloads/raspbian/), [Linux Mint](https://linuxmint.com/) (18/LMDE 4 or newer) or [Kali Linux](https://www.kali.org/). I have tested this with Debian 10.3.0 (Buster). **If other versions don't work please open an issue.** It is likely due to a required library having a different name.
+Script for installing Guacamole 1.5.3 on Ubuntu 16.04 or newer (with MySQL, or remote MySQL). It should also work on pure [Debian](https://www.debian.org/), [Raspbian](https://www.raspberrypi.org/downloads/raspbian/), [Linux Mint](https://linuxmint.com/) (18/LMDE 4 or newer) or [Kali Linux](https://www.kali.org/). I have tested this with Debian 10.3.0 (Buster). **If other versions don't work please open an issue.** It is likely due to a required library having a different name.
 
-Run script, enter MySQL Root Password and Guacamole User password. Guacamole User is used to connect to the Guacamole Database.
+Run script, enter MySQL Root Password and Guacamole User password. Guacamole User is used to connect to the Guacamole Database. Be sure to save these!
 
 The script attempts to install `tomcat9` by default (it will fall back on `tomcat8` **if the available version is 8.5.x or newer**, otherwise it will fall back to `tomcat7`). If you want to manually specify a tomcat version there's a commented out line you can modify. Have at it.
 
-If you're looking to also have NGINX / Let's Encrypt / HTTPS click [HERE](https://github.com/bigredthelogger/guacamole)
-
 ## MFA/2FA
 
-By default the script will not install MFA support (QR code for Google/Microsoft Authenticator, Duo Mobile, etc. or Duo Push), if you do want MFA support you can use the `-t` or `--totp` or for Duo `-d` or `--duo` flags on the command line. Or modify the script variables `installTOTP=true` or `installDuo=true`. **Do not install both**
+By default the script will not install MFA support (QR code for Google/Microsoft Authenticator, Duo Mobile, etc. or Duo Push), if you do want MFA support you can use the `-t` or `--totp` or for Duo `-d` or `--duo` flags on the command line. Or modify the script variables `installTOTP=true` or `installDuo=true`. **Do not install both!**
 
 ## FYI
 
 Here's a cool PowerShell module for using the Guacamole API: https://github.com/UpperM/guacamole-powershell
 
-Does not work if you have MFA turned on (however, you can authenticate via the gui and get a token to use it that way)
+Does not work if you have MFA turned on (however, you can authenticate via the gui and get a token to use it that way).
 
 ## How to Run:
 
@@ -117,10 +119,9 @@ NOTE: Only the switches for MySQL Host, MySQL Port and Guacamole Database are av
 
 ## WARNING
 
-- Upgrading from 0.9.14 or 1.1.0 to 1.3.0 has not been tested, only 1.2.0 to 1.3.0 has been tested.
-- Switches have changed and additional ones have been added!
+- Upgrading from versions older than a couple dot fixes ago have not been tested with this script, use at your own risk and take backups first!
 
-## How to Run:
+## How to Upgrade:
 
 ### Download file directly from here:
 
@@ -139,3 +140,38 @@ Interactive (asks for passwords):
 Non-Interactive (MySQL root password provided via cli):
 
 `./guac-upgrade.sh --mysqlpwd password`
+
+## Post Installation - Reverse Proxies
+
+Make sure that you configure your reverse proxy (NGinx or Apache) as per the [Official Documentation](https://guacamole.apache.org/doc/0.9.7/gug/proxying-guacamole.html)
+
+For Nginx:
+```
+location /guacamole/ {
+    proxy_pass http://HOSTNAME:8080/guacamole/;
+    proxy_buffering off;
+    proxy_http_version 1.1;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $http_connection;
+    access_log off;
+}
+```
+For Apache:
+```
+<Location /guacamole/>
+    Order allow,deny
+    Allow from all
+    ProxyPass http://HOSTNAME:8080/guacamole/ flushpackets=on
+    ProxyPassReverse http://HOSTNAME:8080/guacamole/
+</Location>
+```
+
+## NOTE: SSH doesnt work with Ubuntu 22.04:
+
+Guacamole only supports ssh-dss and ssh-rsa, and both have been disabled in Ubuntu 22.04.
+
+In the meantime a workaround is adding ```HostKeyAlgorithms +ssh-rsa``` to the end of ``` /etc/ssh/sshd_config ``` on the Ubuntu machine and restart sshd. 
+
+###### :warning: use at your own risk! :warning:
+

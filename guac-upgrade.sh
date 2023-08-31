@@ -4,7 +4,7 @@
 if ! [ $(id -u) = 0 ]; then echo "Please run this script as sudo or root"; exit 1 ; fi
 
 # Version number of Guacamole to install
-GUACVERSION="1.3.0"
+GUACVERSION="1.5.3"
 
 # Colors to use for output
 YELLOW='\033[1;33m'
@@ -32,7 +32,7 @@ while [ "$1" != "" ]; do
             ;;
         -r | --mysqlpwd )
             shift
-            mysqlrootpwd="$1"
+            mysqlRootPwd="$1"
             ;;
     esac
     shift
@@ -124,11 +124,11 @@ fi
 
 # Upgrade Guacamole Server
 cd guacamole-server-${GUACVERSION}
-./configure --with-init-dir=/etc/init.d
+./configure --with-systemd-dir=/etc/systemd/system
 if [ $? -ne 0 ]; then
     echo "Failed to configure guacamole-server"
     echo "Trying again with --enable-allow-freerdp-snapshots"
-    ./configure --with-init-dir=/etc/init.d --enable-allow-freerdp-snapshots
+    ./configure --with-systemd-dir=/etc/systemd/system --enable-allow-freerdp-snapshots
     if [ $? -ne 0 ]; then
         echo "Failed to configure guacamole-server - again"
         exit
@@ -196,6 +196,14 @@ for file in /etc/guacamole/extensions/guacamole-auth-duo*.jar; do
         break
     fi
 done
+
+# Fix for #196
+mkdir -p /usr/sbin/.config/freerdp
+chown daemon:daemon /usr/sbin/.config/freerdp
+
+# Fix for #197
+mkdir -p /var/guacamole
+chown daemon:daemon /var/guacamole
 
 # Start tomcat and Guacamole
 echo -e "${BLUE}Starting tomcat and guacamole...${NC}"

@@ -15,11 +15,11 @@ fi
 
 # Version number of Guacamole to install
 # Homepage ~ https://guacamole.apache.org/releases/
-GUACVERSION="1.3.0"
+GUACVERSION="1.5.3"
 
 # Latest Version of MySQL Connector/J if manual install is required (if libmariadb-java/libmysql-java is not available via apt)
 # Homepage ~ https://dev.mysql.com/downloads/connector/j/
-MCJVER="8.0.19"
+MCJVER="8.0.27"
 
 # Colors to use for output
 YELLOW='\033[1;33m'
@@ -101,7 +101,7 @@ done
 
 if [[ -z "${installTOTP}" ]] && [[ "${installDuo}" != true ]]; then
     # Prompt the user if they would like to install TOTP MFA, default of no
-    echo -e -n "${CYAN}MFA: Would you like to install TOTP? (y/N): ${NC}"
+    echo -e -n "${CYAN}MFA: Would you like to install TOTP (choose 'N' if you want Duo)? (y/N): ${NC}"
     read PROMPT
     if [[ ${PROMPT} =~ ^[Yy]$ ]]; then
         installTOTP=true
@@ -217,7 +217,7 @@ source /etc/os-release
 if [[ "${NAME}" == "Ubuntu" ]] || [[ "${NAME}" == "Linux Mint" ]]; then
     # Ubuntu > 18.04 does not include universe repo by default
     # Add the "Universe" repo, don't update
-    add-apt-repository -yn universe
+    add-apt-repository -y universe
     # Set package names depending on version
     JPEGTURBO="libjpeg-turbo8-dev"
     if [[ "${VERSION_ID}" == "16.04" ]]; then
@@ -235,7 +235,7 @@ if [[ "${NAME}" == "Ubuntu" ]] || [[ "${NAME}" == "Linux Mint" ]]; then
     fi
 elif [[ "${NAME}" == *"Debian"* ]] || [[ "${NAME}" == *"Raspbian GNU/Linux"* ]] || [[ "${NAME}" == *"Kali GNU/Linux"* ]] || [[ "${NAME}" == "LMDE" ]]; then
     JPEGTURBO="libjpeg62-turbo-dev"
-    if [[ "${PRETTY_NAME}" == *"stretch"* ]] || [[ "${PRETTY_NAME}" == *"buster"* ]] || [[ "${PRETTY_NAME}" == *"Kali GNU/Linux Rolling"* ]] || [[ "${NAME}" == "LMDE" ]]; then
+    if [[ "${PRETTY_NAME}" == *"bullseye"* ]] || [[ "${PRETTY_NAME}" == *"stretch"* ]] || [[ "${PRETTY_NAME}" == *"buster"* ]] || [[ "${PRETTY_NAME}" == *"Kali GNU/Linux Rolling"* ]] || [[ "${NAME}" == "LMDE" ]]; then
         LIBPNG="libpng-dev"
     else
         LIBPNG="libpng12-dev"
@@ -404,17 +404,28 @@ rm -rf /etc/guacamole/extensions/
 mkdir -p /etc/guacamole/lib/
 mkdir -p /etc/guacamole/extensions/
 
+# Fix for #196
+mkdir -p /usr/sbin/.config/freerdp
+chown daemon:daemon /usr/sbin/.config/freerdp
+
+# Fix for #197
+mkdir -p /var/guacamole
+chown daemon:daemon /var/guacamole
+
 # Install guacd (Guacamole-server)
 cd guacamole-server-${GUACVERSION}/
 
 echo -e "${BLUE}Building Guacamole-Server with GCC $( gcc --version | head -n1 | grep -oP '\)\K.*' | awk '{print $1}' ) ${NC}"
 
+# Fix for warnings #222
+export CFLAGS="-Wno-error"
+
 echo -e "${BLUE}Configuring Guacamole-Server. This might take a minute...${NC}"
-./configure --with-init-dir=/etc/init.d  &>> ${LOG}
+./configure --with-systemd-dir=/etc/systemd/system  &>> ${LOG}
 if [ $? -ne 0 ]; then
     echo "Failed to configure guacamole-server"
     echo "Trying again with --enable-allow-freerdp-snapshots"
-    ./configure --with-init-dir=/etc/init.d --enable-allow-freerdp-snapshots
+    ./configure --with-systemd-dir=/etc/systemd/system --enable-allow-freerdp-snapshots
     if [ $? -ne 0 ]; then
         echo "Failed to configure guacamole-server - again"
         exit
@@ -630,6 +641,14 @@ else
     echo -e "${GREEN}OK${NC}"
 fi
 echo
+
+# Create guacd.conf file required for 1.4.0
+echo -e "${BLUE}Create guacd.conf file...${NC}"
+cat >> /etc/guacamole/guacd.conf <<- "EOF"
+[server]
+bind_host = 0.0.0.0
+bind_port = 4822
+EOF
 
 # Ensure guacd is started
 echo -e "${BLUE}Starting guacd service & enable at boot...${NC}"
